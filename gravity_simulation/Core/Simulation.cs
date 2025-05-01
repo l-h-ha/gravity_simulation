@@ -2,15 +2,12 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
-namespace gravity_simulation
+namespace gravity_simulation.Core
 {
     public class Simulation : Game
     {
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
-
-        private BasicEffect basicEffect;
-        private VertexPositionColor[] body;
 
         public Simulation()
         {
@@ -45,7 +42,7 @@ namespace gravity_simulation
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(Color.CornflowerBlue);
+            GraphicsDevice.Clear(Color.Black);
 
             // TODO: Add your drawing code here
 
