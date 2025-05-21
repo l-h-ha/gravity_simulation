@@ -1,5 +1,4 @@
 ﻿using gravity_simulation.Models;
-using gravity_simulation.Constants;
 
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,18 +12,16 @@ namespace gravity_simulation.Core
     {
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
-
-        private BasicEffect BasicEffect;
-        private VertexPositionColor[] points;
         
+        private Texture2D _pointTexture;
+        private SpriteFont StatsFont;
+
+        private Microsoft.Xna.Framework.Vector2 StatsFontPos;
+        private Microsoft.Xna.Framework.Vector2 FPS_Pos;
+
         private Space space;
 
         const int numBodies = 100;
-        const int targetWidth = 5;
-        const int targetHeight = 5;
-
-        private double targetWidthRatio;
-        private double targetHeightRatio;
 
         public Simulation()
         {
@@ -35,34 +32,23 @@ namespace gravity_simulation.Core
 
         protected override void Initialize()
         {
-            // TODO: Add your initialization logic here
-
-            BasicEffect = new BasicEffect(GraphicsDevice);
-            BasicEffect.VertexColorEnabled = true;
-            BasicEffect.View = Matrix.CreateLookAt(new Vector3(0, 0, 1), Vector3.Zero, Vector3.Up);
-
-            var viewport = GraphicsDevice.Viewport;
-            float screenWidth = viewport.Width;
-            float screenHeight = viewport.Height;
-
-            BasicEffect.Projection = Matrix.CreateOrthographicOffCenter(0, screenWidth, screenHeight, 0, 0.1f, 1000);
-            BasicEffect.World = Matrix.Identity;
-
-            targetWidthRatio = targetWidth / screenWidth;
-            targetHeightRatio = targetHeight / screenHeight;
+            _graphics.IsFullScreen = true;
+            _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
+            _graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
+            _graphics.ApplyChanges();
 
             ///
 
+            var viewport = GraphicsDevice.Viewport;
             var random = new Random();
-            space = new Space(numBodies);
-            points = new VertexPositionColor[numBodies];
+
+            space = new Space(numBodies, new Models.Vector2(viewport.Width, viewport.Height));
 
             for (int i = 0; i < numBodies; i++)
             {
                 var x = random.Next(0, viewport.Width);
                 var y = random.Next(0, viewport.Height);
-                points[i] = new VertexPositionColor(new Vector3(x, y, 0), Color.White);
-                space.AddBody(new Body(1, 1, new Models.Vector2(x, y)));
+                space.AddBody(new Body(100, 2, new Models.Vector2(x, y)));
             }
 
             base.Initialize();
@@ -72,42 +58,96 @@ namespace gravity_simulation.Core
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            // TODO: use this.Content to load your game content here
+            _pointTexture = new Texture2D(GraphicsDevice, 1, 1);
+            _pointTexture.SetData(new[] { Color.White });
+
+            StatsFont = Content.Load<SpriteFont>("StatsFont");
+            StatsFontPos = new Microsoft.Xna.Framework.Vector2(10, 10);
+            FPS_Pos = new Microsoft.Xna.Framework.Vector2(10, 30);
         }
 
         protected override void Update(GameTime gameTime)
         {
-            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed)
-                Exit();
-
-            // TODO: Add your update logic here
-
-            var dt = gameTime.ElapsedGameTime.TotalSeconds;
-            space.Update(dt, targetWidthRatio, targetHeightRatio);
-
-            for (int i = 0; i < numBodies; i++)
+            if (Keyboard.GetState().IsKeyDown(Keys.Escape))
             {
-                points[i] = new VertexPositionColor(
-                    new Vector3((float)space.bodies[i].Position.X, (float)space.bodies[i].Position.Y, 0), 
-                    Color.White
-                    );
+                Exit();
             }
 
+            var dt = gameTime.ElapsedGameTime.TotalSeconds;
+            space.Update(dt);
+
             base.Update(gameTime);
+        }
+
+        private void DrawNode(Quadtree node, Color outlineColor, double thickness = 0.1)
+        {
+            if (node is null) return;
+
+            Rectangle OuterRect = new Rectangle(
+                (int)(node.Boundary.Center.X - node.Boundary.HalfSize.X),
+                (int)(node.Boundary.Center.Y - node.Boundary.HalfSize.Y),
+                (int)node.Boundary.HalfSize.X * 2,
+                (int)node.Boundary.HalfSize.Y * 2
+            );
+
+            Rectangle InnerRect = new Rectangle(
+                (int)(node.Boundary.Center.X - node.Boundary.HalfSize.X + thickness*20),
+                (int)(node.Boundary.Center.Y - node.Boundary.HalfSize.Y + thickness*20),
+                (int)(node.Boundary.HalfSize.X * (2 - thickness)),
+                (int)(node.Boundary.HalfSize.Y * (2 - thickness))
+            );
+
+            _spriteBatch.Draw(_pointTexture, OuterRect, outlineColor);
+            _spriteBatch.Draw(_pointTexture, InnerRect, Color.Black);
+
+            DrawNode(node.Topleft, outlineColor, thickness);
+            DrawNode(node.Topright, outlineColor, thickness);
+            DrawNode(node.Bottomleft, outlineColor, thickness);
+            DrawNode(node.Bottomright, outlineColor, thickness);
         }
 
         protected override void Draw(GameTime gameTime)
         {
             GraphicsDevice.Clear(Color.Black);
+            _spriteBatch.Begin();
 
-            // TODO: Add your drawing code here
 
-            foreach (EffectPass pass in BasicEffect.CurrentTechnique.Passes)
+            // Visualize the quadtree
+
+            Quadtree quadtree = space.Quadtree;
+            DrawNode(quadtree, Color.Green, 0.1);
+
+            // Draw the bodies
+
+            foreach (var body in space.Bodies)
             {
-                pass.Apply();
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.PointList, points, 0, points.Length);
+                double bodyRadius = body.Radius;
+                Models.Vector2 bodyPosition = body.Position;
+
+                Rectangle rect = new Rectangle(
+                    (int)(bodyPosition.X - bodyRadius),
+                    (int)(bodyPosition.Y - bodyRadius),
+                    (int)(bodyRadius * 2),
+                    (int)(bodyRadius * 2)
+                    );
+
+                _spriteBatch.Draw(
+                    _pointTexture,
+                    rect,
+                    Color.White
+                    );
             }
 
+            // Draw delta-time
+
+            var dt = gameTime.ElapsedGameTime.TotalSeconds;
+            _spriteBatch.DrawString(StatsFont, $"Delta Time: {dt}", StatsFontPos, Color.White);
+            _spriteBatch.DrawString(StatsFont, $"FPS: {Math.Floor(1/dt)}", FPS_Pos, Color.White);
+
+
+            //
+
+            _spriteBatch.End();
             base.Draw(gameTime);
         }
     }

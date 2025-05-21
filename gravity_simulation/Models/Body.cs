@@ -7,16 +7,16 @@ namespace gravity_simulation.Models
         // Properties
 
         public double Mass { get; set; }
-        public double Size { get; set; }
+        public double Radius { get; set; }
         public Vector2 Position { get; set; }
         public Vector2 Velocity { get; set; }
 
         // Constructor
         
-        public Body(double _mass, double _size, Vector2 _position)
+        public Body(double _mass, double _radius, Vector2 _position)
         {
             Mass = _mass;
-            Size = _size;
+            Radius = _radius;
             Position = _position;
             Velocity = Vector2.Zero;
         }

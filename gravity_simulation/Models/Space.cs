@@ -9,45 +9,69 @@ namespace gravity_simulation.Models
     {
         // Properties
 
-        public List<Body> bodies;
+        public List<Body> Bodies;
+        public Quadtree Quadtree;
+
+        public Models.Vector2 Viewport;
 
         // Constructor
         
-        public Space(int numBodies)
+        public Space(int numBodies, Models.Vector2 viewport)
         {
-            bodies = new List<Body>(numBodies);
+            Bodies = new List<Body>(numBodies);
+            Viewport = viewport;
+            Quadtree = new Quadtree(new AABB(viewport / 2, viewport / 2));
         }
 
         // Methods
 
         public void AddBody(Body Body)
         {
-            bodies.Add(Body);
+            Bodies.Add(Body);
+            Quadtree.Insert(Body);
         }
 
-        public void Update(double dt, double targetWidthRatio, double targetHeightRatio)
+        public void Update(double dt)
         {
-            double hypotenuse = Math.Sqrt(Math.Pow(targetWidthRatio, 2) + Math.Pow(targetHeightRatio, 2));
+            // Udate the quadtree with the new positions of the bodies
 
-            for (int i = 0; i < bodies.Count; i++)
+            AABB boundary = Quadtree.Boundary;
+            Quadtree = new Quadtree(boundary);
+
+            foreach (Body body in Bodies)
             {
-                for (int j = 0; j < bodies.Count; j++)
+                Quadtree.Insert(body);
+            }
+
+            // Update the positions and velocities of the bodies based on gravitational forces
+
+            for (int i = 0; i < Bodies.Count; i++)
+            {
+                for (int j = 0; j < Bodies.Count; j++)
                 {
                     if (i != j)
                     {
-                        double distance = Math.Max(bodies[i].DistanceTo(bodies[j]) * hypotenuse, bodies[i].Size + bodies[j].Size);
-                        double force = (MathConstants.G * bodies[i].Mass * bodies[j].Mass) / (distance * distance + MathConstants.EPSILON_SQUARED);
-                        Vector2 direction = (bodies[j].Position - bodies[i].Position).Normalize();
-                        bodies[i].Velocity += direction * force / bodies[i].Mass;
+                        double distance = Math.Max(Bodies[i].DistanceTo(Bodies[j]), Bodies[i].Radius + Bodies[j].Radius) / 10;
+                        double force = (MathConstants.G * Bodies[i].Mass * Bodies[j].Mass) / (distance * distance + MathConstants.EPSILON_SQUARED);
+                        Vector2 direction = (Bodies[j].Position - Bodies[i].Position).Normalize();
+                        Bodies[i].Velocity += (direction * force / Bodies[i].Mass) * dt; // v += a * dt
                     }
                 }
             }
 
-            foreach (Body body in bodies)
+            foreach (Body body in Bodies)
             {
-                body.Position += body.Velocity * dt;
+                body.Position += body.Velocity * dt; // p += v * dt
+            }
 
-                //Debug.WriteLine($"v: ({body.Velocity.X}, {body.Velocity.Y}) p: ({body.Position.X}, {body.Position.Y}) dt: {dt} a: ({body.Acceleration.X}, {body.Acceleration.Y})");
+            // Wrap the body within the viewport
+
+            foreach (Body body in Bodies)
+            {
+                if (body.Position.X < 0) body.Position.X = Viewport.X;
+                if (body.Position.Y < 0) body.Position.Y = Viewport.Y;
+                if (body.Position.X > Viewport.X) body.Position.X = 0;
+                if (body.Position.Y > Viewport.Y) body.Position.Y = 0;
             }
         }
     }
