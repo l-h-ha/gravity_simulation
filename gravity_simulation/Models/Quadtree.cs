@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace gravity_simulation.Models
 {
@@ -31,19 +32,16 @@ namespace gravity_simulation.Models
     internal class Quadtree
     {
         const int QT_NODE_CAPACITY = 4;
-        const int QT_NODE_DEPTH = 10;
 
         public AABB Boundary;
-        List<Body> Bodies;
+        public List<Body> Bodies;
 
         public Quadtree Topleft;
         public Quadtree Topright;
         public Quadtree Bottomleft;
         public Quadtree Bottomright;
 
-        int CurrentDepth = 0;
-
-        public Quadtree(AABB boundary, int currentDepth = 1)
+        public Quadtree(AABB boundary)
         {
             Boundary = boundary;
             Bodies = new List<Body>();
@@ -51,7 +49,6 @@ namespace gravity_simulation.Models
             Topright = null;
             Bottomleft = null;
             Bottomright = null;
-            CurrentDepth = currentDepth;
         }
 
         public bool Insert(Body point)
@@ -62,12 +59,12 @@ namespace gravity_simulation.Models
 
             // If this is a leaf node
 
-            if (Topleft is null)
+            if (isLeaf())
             {
                 // If this node has not reached capacity, add the point to this node.
                 // OR if CurrentDepth is equal or greater to QT_NODE_DEPTH, add the point to this node.
 
-                if (Bodies.Count < QT_NODE_CAPACITY || CurrentDepth >= QT_NODE_DEPTH)
+                if (Bodies.Count + 1 < QT_NODE_CAPACITY)
                 {
                     Bodies.Add(point);
                     return true;
@@ -87,7 +84,7 @@ namespace gravity_simulation.Models
 
             // Point cannot be inserted god knows why. Returns false.
 
-            Console.WriteLine($"Point {point.Position} at boundary of {Boundary.Center} could not be placed in a child.");
+            Debug.Print($"Point {point.Position} at boundary of {Boundary.Center} could not be placed in a child.");
 
             return false;
         }
@@ -102,7 +99,7 @@ namespace gravity_simulation.Models
 
             // Case 1: Node has not subdivided yet. Removes the point from this node.
 
-            if (Topleft is null) return Bodies.Remove(body);
+            if (isLeaf()) return Bodies.Remove(body);
 
             // Case 2: Node has subdivided. Removes the point from the child nodes.
 
@@ -125,17 +122,13 @@ namespace gravity_simulation.Models
 
         public void Subdivide()
         {
-            // If CurrentDepth is equal or greater to QT_NODE_DEPTH, return.
-
-            if (CurrentDepth >= QT_NODE_DEPTH) return;
-
             // Creating four quadrants.
 
             Models.Vector2 halfSize = new Models.Vector2(Boundary.HalfSize.X / 2, Boundary.HalfSize.Y / 2);
-            Topleft = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X - halfSize.X, Boundary.Center.Y - halfSize.Y), halfSize), CurrentDepth + 1);
-            Topright = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X + halfSize.X, Boundary.Center.Y - halfSize.Y), halfSize), CurrentDepth + 1);
-            Bottomleft = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X - halfSize.X, Boundary.Center.Y + halfSize.Y), halfSize), CurrentDepth + 1);
-            Bottomright = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X + halfSize.X, Boundary.Center.Y + halfSize.Y), halfSize), CurrentDepth + 1);
+            Topleft = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X - halfSize.X, Boundary.Center.Y - halfSize.Y), halfSize));
+            Topright = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X + halfSize.X, Boundary.Center.Y - halfSize.Y), halfSize));
+            Bottomleft = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X - halfSize.X, Boundary.Center.Y + halfSize.Y), halfSize));
+            Bottomright = new Quadtree(new AABB(new Models.Vector2(Boundary.Center.X + halfSize.X, Boundary.Center.Y + halfSize.Y), halfSize));
 
             // Move all bodies from this node to the child nodes.
 
@@ -156,7 +149,7 @@ namespace gravity_simulation.Models
         {
             // If this node is a leaf node, return.
 
-            if (Topleft is null) return;
+            if (isLeaf()) return;
 
             // This node is not a leaf node. Checking body count.
             // If body count does not exceed capacity, merge the child nodes into this node.
@@ -185,13 +178,9 @@ namespace gravity_simulation.Models
 
         public void AddBodyToList(Quadtree node, List<Body> targetList)
         {
-            // If node or targetList is null, return.
-
-            if (node is null || targetList is null) return;
-
             // If node is a leaf node, add the bodies to the target list.
 
-            if (node.Topleft is null)
+            if (node.isLeaf())
             {
                 targetList.AddRange(node.Bodies);
                 return;
@@ -209,7 +198,7 @@ namespace gravity_simulation.Models
         {
             // If this node is a leaf node, return the body count.
 
-            if (Topleft is null) return Bodies.Count;
+            if (isLeaf()) return Bodies.Count;
 
             // This node is not a leaf node. Return the sum of the body counts of the child nodes.
 
@@ -217,12 +206,63 @@ namespace gravity_simulation.Models
 
             // The redundant checks (is not null) are here is to make sure 100% we count the leaves only.
 
-            if (Topleft is not null) sum += Topleft.Count();
-            if (Topright is not null) sum += Topright.Count();
-            if (Bottomleft is not null) sum += Bottomleft.Count();
-            if (Bottomright is not null) sum += Bottomright.Count();
+            sum += Topleft.Count();
+            sum += Topright.Count();
+            sum += Bottomleft.Count();
+            sum += Bottomright.Count();
 
             return sum;
+        }
+
+        public bool isLeaf()
+        {
+            return (Topleft is null && Topright is null && Bottomleft is null && Bottomright is null);
+        }
+
+        //
+
+        public double GetWidth()
+        {
+            return Boundary.HalfSize.X * 2;
+        }
+
+        public double GetTotalMass()
+        {
+            List<Body> bodies = new List<Body>();
+            AddBodyToList(this, bodies);
+
+            double totalMass = 0;
+
+            foreach (Body body in bodies)
+            {
+                totalMass += body.Mass;
+            }
+
+            return totalMass;
+        }
+
+        public Models.Vector2 GetCenterOfMass()
+        {
+            List<Body> bodies = new List<Body>();
+            AddBodyToList(this, bodies);
+
+            if (bodies.Count == 0) return Boundary.Center;
+
+            double totalMass = 0;
+            Models.Vector2 centerOfMass = new Models.Vector2(0, 0);
+
+            foreach (Body body in bodies)
+            {
+                centerOfMass += body.Position * body.Mass;
+                totalMass += body.Mass;
+            }
+
+            // A body of no mass exerts no gravitational force
+             
+            if (totalMass == 0) return Boundary.Center;
+
+            centerOfMass /= totalMass;
+            return centerOfMass;
         }
     }
 }

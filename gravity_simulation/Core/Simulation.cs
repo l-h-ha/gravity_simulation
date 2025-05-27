@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
 using System;
+using Vector2 = Microsoft.Xna.Framework.Vector2;
 
 namespace gravity_simulation.Core
 {
@@ -21,7 +22,7 @@ namespace gravity_simulation.Core
 
         private Space space;
 
-        const int numBodies = 100;
+        const int numBodies = 220;
 
         public Simulation()
         {
@@ -46,9 +47,9 @@ namespace gravity_simulation.Core
 
             for (int i = 0; i < numBodies; i++)
             {
-                var x = random.Next(0, viewport.Width);
-                var y = random.Next(0, viewport.Height);
-                space.AddBody(new Body(100, 2, new Models.Vector2(x, y)));
+                var x = random.Next(100, viewport.Width-100);
+                var y = random.Next(100, viewport.Height-100);
+                space.AddBody(new Body(10, 2, new Models.Vector2(x, y)));
             }
 
             base.Initialize();
@@ -106,6 +107,40 @@ namespace gravity_simulation.Core
             DrawNode(node.Bottomright, outlineColor, thickness);
         }
 
+        public void DrawLine(SpriteBatch spriteBatch, Texture2D texture, Vector2 point1, Vector2 point2, float thickness)
+        {
+            float distance = Vector2.Distance(point1, point2);
+            float angle = (float)Math.Atan2(point2.Y - point1.Y, point2.X - point1.X);
+        
+            Vector2 origin = new Vector2(0, 0.5f);
+            Vector2 scale = new Vector2(distance, thickness);
+            spriteBatch.Draw(texture, point1, null, Color.White, angle, origin, scale, SpriteEffects.None, 0f);
+        }
+
+        internal void DrawParticleLine(Quadtree node)
+        {
+            if (node.isLeaf())
+            {
+                foreach (Body body in node.Bodies)
+                {
+                    Vector2 bodyPosition = new Vector2((float) body.Position.X, (float) body.Position.Y);
+                    Vector2 nodePosition = new Vector2(
+                        (float) node.Boundary.Center.X,
+                        (float) node.Boundary.Center.Y
+                    );
+
+                    DrawLine(_spriteBatch, _pointTexture, bodyPosition, nodePosition, 2f);
+                }
+            }
+            else
+            {
+                DrawParticleLine(node.Topleft);
+                DrawParticleLine(node.Topright);
+                DrawParticleLine(node.Bottomleft);
+                DrawParticleLine(node.Bottomright);
+            }
+        }
+        
         protected override void Draw(GameTime gameTime)
         {
             GraphicsDevice.Clear(Color.Black);
@@ -114,8 +149,8 @@ namespace gravity_simulation.Core
 
             // Visualize the quadtree
 
-            Quadtree quadtree = space.Quadtree;
-            DrawNode(quadtree, Color.Green, 0.1);
+            //Quadtree quadtree = space.Quadtree;
+            //DrawNode(quadtree, Color.Green, 0.1);
 
             // Draw the bodies
 
@@ -144,8 +179,9 @@ namespace gravity_simulation.Core
             _spriteBatch.DrawString(StatsFont, $"Delta Time: {dt}", StatsFontPos, Color.White);
             _spriteBatch.DrawString(StatsFont, $"FPS: {Math.Floor(1/dt)}", FPS_Pos, Color.White);
 
+            // Visualize points within quadrants
 
-            //
+            // DrawParticleLine(quadtree);
 
             _spriteBatch.End();
             base.Draw(gameTime);

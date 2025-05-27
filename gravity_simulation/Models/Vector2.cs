@@ -31,12 +31,15 @@ namespace gravity_simulation.Models
         {
             return Math.Sqrt(X * X + Y * Y);
         }
+        public double MagnitudeSquared()
+        {
+            return X * X + Y * Y;
+        }
 
         public Vector2 Normalize()
         {
             double magnitude = Magnitude();
-            if (magnitude == 0)
-                throw new DivideByZeroException("Cannot normalize a zero vector.");
+            if (magnitude == 0) return Zero;
             return new Vector2(X / magnitude, Y / magnitude);
         }
 

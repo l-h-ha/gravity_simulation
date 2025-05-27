@@ -1,7 +1,8 @@
-﻿using gravity_simulation.Constants;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System;
+using System.Linq;
+using static gravity_simulation.Constants.MathConstants;
 
 namespace gravity_simulation.Models
 {
@@ -31,6 +32,76 @@ namespace gravity_simulation.Models
             Quadtree.Insert(Body);
         }
 
+        public Models.Vector2 CalculateNetForce(Body obj, Quadtree node)
+        {
+            Models.Vector2 netForce = Vector2.Zero;
+
+            double objMass = obj.Mass;
+            Models.Vector2 objPosition = obj.Position;
+            
+            if (node.isLeaf())
+            {
+                int bodyCount = node.Bodies.Count();
+
+                if (bodyCount == 0)
+                {
+                    return netForce;
+                }
+
+                foreach (Body body in node.Bodies)
+                {
+                    if (body == obj || body is null) continue;
+
+                    double bodyMass = body.Mass;
+                    Models.Vector2 bodyPosition = body.Position;
+
+                    Models.Vector2 dir = bodyPosition - objPosition;
+
+                    double distanceSquared = Math.Max(dir.MagnitudeSquared(), Math.Pow(obj.Radius + body.Radius, 2));
+                    double forceScale = (G * objMass * bodyMass) / (distanceSquared + EPSILON_SQUARED); // F = G * m1 * m2 / r^2
+
+                    Models.Vector2 force = dir.Normalize() * forceScale;
+                    netForce += force;
+                }
+            }
+
+            // Accounted node is an internal node, we will check whether to approximate or to go further
+
+            else
+            {
+                double distanceToNode = (node.Boundary.Center - objPosition).Magnitude();
+                double nodeWidth = node.GetWidth();
+
+                // Since node is sufficiently far away, we can approximate it as a single body
+
+                if (nodeWidth / distanceToNode < THETA)
+                {
+                    double nodeMass = node.GetTotalMass();
+                    Models.Vector2 nodeCenterOfMass = node.GetCenterOfMass();
+                   
+                    Models.Vector2 dir = nodeCenterOfMass - objPosition;
+
+                    double distanceSquared = Math.Max(dir.MagnitudeSquared(), Math.Pow(objMass + nodeMass, 2));
+                    double forceScale = (G * objMass * nodeMass) / (distanceSquared + EPSILON_SQUARED); // F = G * m1 * m2 / r^2
+                    
+                    Models.Vector2 force = dir.Normalize() * forceScale;
+                    netForce += force;
+                }
+
+                // Node is not sufficiently far away, we will go deeper into the tree
+
+                else
+                {
+                    netForce += CalculateNetForce(obj, node.Topleft);
+                    netForce += CalculateNetForce(obj, node.Topright);
+                    netForce += CalculateNetForce(obj, node.Bottomleft);
+                    netForce += CalculateNetForce(obj, node.Bottomright);
+                }
+            }
+
+            return netForce;
+        }
+
         public void Update(double dt)
         {
             // Udate the quadtree with the new positions of the bodies
@@ -43,20 +114,12 @@ namespace gravity_simulation.Models
                 Quadtree.Insert(body);
             }
 
-            // Update the positions and velocities of the bodies based on gravitational forces
+            // Barnes-Hut solution
 
-            for (int i = 0; i < Bodies.Count; i++)
+            foreach (Body body in Bodies)
             {
-                for (int j = 0; j < Bodies.Count; j++)
-                {
-                    if (i != j)
-                    {
-                        double distance = Math.Max(Bodies[i].DistanceTo(Bodies[j]), Bodies[i].Radius + Bodies[j].Radius) / 10;
-                        double force = (MathConstants.G * Bodies[i].Mass * Bodies[j].Mass) / (distance * distance + MathConstants.EPSILON_SQUARED);
-                        Vector2 direction = (Bodies[j].Position - Bodies[i].Position).Normalize();
-                        Bodies[i].Velocity += (direction * force / Bodies[i].Mass) * dt; // v += a * dt
-                    }
-                }
+                Models.Vector2 netForce = CalculateNetForce(body, Quadtree);
+                body.Velocity += netForce / body.Mass * dt; // v += a * dt
             }
 
             foreach (Body body in Bodies)
